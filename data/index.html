@@ -72,7 +72,7 @@ body.stale .t b{opacity:.4}
  <span id="link" class="t bad">НЕТ СВЯЗИ</span>
  <span class="t"><small>глуб.</small> <b id="vDepth">—</b> <small>м</small></span>
  <span class="t"><small>темп.</small> <b id="vTemp">—</b> <small>°C</small></span>
- <span id="bat" class="t"><small>АКБ</small> <b id="vBat">—</b> <small>В</small></span>
+ <span id="bat" class="t"><small>АКБ</small> <b id="vBat">—</b> <small id="vBatU">В</small></span>
  <span class="t"><small>курс</small> <b id="vYaw">—</b><small>° отн.</small></span>
  <span class="t"><small>видео</small> <b id="vFps">0</b> <small>к/с</small></span>
  <span id="sp"></span>
@@ -109,6 +109,7 @@ body.stale .t b{opacity:.4}
   var CONNECT_TIMEOUT_MS = 3000;    // зависшее подключение закрывается
   var VBAT_WARN_V = 14.0;           // config.h VBAT_WARN_V
   var VBAT_CRIT_V = 13.2;           // config.h VBAT_CRIT_V
+  var VBAT_NONE_V = 0.05;           // ICD §6: vbat = 0 — напряжение не измеряется
   var ARM_HOLD_MS = 1000;           // удержание кнопки ARM
   var DEADZONE = 0.05;              // мёртвая зона джойстика
   var EXPO = 0.4;                   // доля кубической составляющей кривой
@@ -346,13 +347,15 @@ body.stale .t b{opacity:.4}
     lastTelem = performance.now();
     $("vDepth").textContent = o.depth.toFixed(2);
     $("vTemp").textContent = o.temp.toFixed(1);
-    $("vBat").textContent = o.vbat.toFixed(2);
     var y = o.yaw % 360; if (y < 0) y += 360;
     $("vYaw").textContent = y.toFixed(0);
     var bat = $("bat");
-    bat.classList.toggle("ok", o.vbat >= VBAT_WARN_V);
-    bat.classList.toggle("warn", o.vbat < VBAT_WARN_V && o.vbat >= VBAT_CRIT_V);
-    bat.classList.toggle("bad", o.vbat < VBAT_CRIT_V);
+    var noBat = Math.abs(o.vbat) < VBAT_NONE_V;   // делителя нет: без порогов и тревоги
+    $("vBat").textContent = noBat ? "—" : o.vbat.toFixed(2);
+    $("vBatU").style.display = noBat ? "none" : "";
+    bat.classList.toggle("ok", !noBat && o.vbat >= VBAT_WARN_V);
+    bat.classList.toggle("warn", !noBat && o.vbat < VBAT_WARN_V && o.vbat >= VBAT_CRIT_V);
+    bat.classList.toggle("bad", !noBat && o.vbat < VBAT_CRIT_V);
     $("att").textContent = "крен " + o.roll.toFixed(1) + "° · дифф. " + o.pitch.toFixed(1) + "°";
     drawHorizon(o.roll, o.pitch);
   }

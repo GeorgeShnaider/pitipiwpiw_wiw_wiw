@@ -298,6 +298,8 @@ class Mock:
         temp = 18.0 + 1.5 * math.sin(t * 0.05)
         # Батарея медленно разряжается 16.6 -> 12.8 В и снова "заряжается": видно все цвета
         vbat = 16.6 - 3.8 * (0.5 - 0.5 * math.cos(t * 2 * math.pi / 90.0))
+        if self.args.no_vbat:
+            vbat = 0.0   # ICD §6: 0 — напряжение не измеряется (делителя нет, D-009)
         roll = 25.0 * math.sin(t * 0.7)
         pitch = 15.0 * math.sin(t * 0.43 + 1.0)
         yaw = (t * 12.0) % 360.0
@@ -455,9 +457,10 @@ async def main_async(args):
     async with serve(mock.handler, args.host, args.port,
                      process_request=mock.process_request,
                      max_size=4096, compression=None):
-        print("Mock буя слушает %s:%d  (видео: %s, %.1f к/с%s)"
+        print("Mock буя слушает %s:%d  (видео: %s, %.1f к/с%s%s)"
               % (args.host, args.port, src, args.fps,
-                 ", DROP %.0f из %.0f с" % (args.drop_len, args.drop_period) if args.drop else ""))
+                 ", DROP %.0f из %.0f с" % (args.drop_len, args.drop_period) if args.drop else "",
+                 ", vbat=0 (не измеряется)" if args.no_vbat else ""))
         print("  на этом ПК:   http://127.0.0.1:%d/" % args.port)
         for ip in local_ips():
             print("  с телефона:   http://%s:%d/" % (ip, args.port))
@@ -473,6 +476,7 @@ def main():
     ap.add_argument("--port", type=int, default=8080, help="порт HTTP и WS (по умолчанию 8080)")
     ap.add_argument("--fps", type=float, default=10.0, help="частота видеокадров (по умолчанию 10)")
     ap.add_argument("--frames", help="папка с JPEG-кадрами (по кругу) вместо генератора")
+    ap.add_argument("--no-vbat", action="store_true", help="слать vbat 0.00 («не измеряется», ICD §6)")
     ap.add_argument("--no-pil", action="store_true", help="не использовать Pillow даже если он есть")
     ap.add_argument("--drop", action="store_true", help="периодически замолкать (проверка «НЕТ СВЯЗИ»)")
     ap.add_argument("--drop-period", type=float, default=10.0, help="период цикла --drop, с (по умолчанию 10)")
