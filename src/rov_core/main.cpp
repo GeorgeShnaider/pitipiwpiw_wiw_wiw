@@ -4,6 +4,7 @@
 //  одного I2C-устройства за проход) -> телеметрия -> индикация и лог.
 // =============================================================================
 #include <Arduino.h>
+#include <stdio.h>
 
 #include "comms.h"
 #include "config.h"
@@ -61,11 +62,18 @@ static void logStatus(uint32_t nowMs) {
 
     TelemetryData t;
     sensors::fill(t);
-    logPrintf("[датчики] MS5837=%s%s IMU=%s%s depth=%.2f м temp=%.1f °C vbat=%.2f В "
+    char vbatText[32];
+#if VBAT_ENABLED
+    snprintf(vbatText, sizeof(vbatText), "vbat=%.2f В", static_cast<double>(t.vbat));
+#else
+    // D-009: делителя нет, в телеметрии vbat = 0 означает «не измеряется»
+    snprintf(vbatText, sizeof(vbatText), "vbat: не измеряется");
+#endif
+    logPrintf("[датчики] MS5837=%s%s IMU=%s%s depth=%.2f м temp=%.1f °C %s "
               "roll=%.1f pitch=%.1f yaw=%.1f\n",
               sensors::depthOk() ? "OK" : "НЕТ", sensors::depthZeroed() ? "" : " (обнуление)",
               sensors::imuModel(), sensors::imuCalibrating() ? " (калибровка)" : (sensors::imuOk() ? "" : " НЕТ"),
-              static_cast<double>(t.depth), static_cast<double>(t.temp), static_cast<double>(t.vbat),
+              static_cast<double>(t.depth), static_cast<double>(t.temp), vbatText,
               static_cast<double>(t.roll), static_cast<double>(t.pitch), static_cast<double>(t.yaw));
 }
 

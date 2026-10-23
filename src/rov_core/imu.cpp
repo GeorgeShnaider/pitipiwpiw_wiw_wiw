@@ -11,6 +11,7 @@
 
 #include "config.h"
 #include "i2c_bus.h"
+#include "imu_id.h"
 
 namespace {
 
@@ -31,10 +32,7 @@ constexpr uint8_t kAccelFs2g = 0x00;      // ±2 g
 constexpr float kGyroLsbPerDps = 65.5f;   // для ±500 град/с
 constexpr float kAccelLsbPerG = 16384.0f; // для ±2 g
 
-constexpr uint8_t kWhoMpu6050 = 0x68;
-constexpr uint8_t kWhoMpu6500 = 0x70;
-constexpr uint8_t kWhoMpu9250 = 0x71;
-constexpr uint8_t kWhoMpu9255 = 0x73;
+bool idWarned = false;   // предупреждение о WHO_AM_I — однократно за запуск
 
 // Тайминги — IMU_CALIB_MS/IMU_RETRY_MS из config.h; период опроса — производный
 constexpr uint32_t kPollMs = 1000UL / SENSOR_POLL_HZ;
@@ -92,17 +90,19 @@ bool Mpu6050Imu::update(uint32_t nowMs) {
                 return true;
             }
             whoAmI_ = id;
-            if (id == kWhoMpu6050) {
-                model_ = "MPU6050";
-            } else if (id == kWhoMpu6500) {
-                model_ = "MPU6500";
-            } else if (id == kWhoMpu9250 || id == kWhoMpu9255) {
-                model_ = "MPU925x (совместимый, магнитометр не используется)";
-                logPrintf("[imu] ВНИМАНИЕ: WHO_AM_I=0x%02X, не 6050/6500, работаем как с совместимым\n", id);
-            } else {
-                model_ = "неизвестный WHO_AM_I";
+            const ImuIdClass cls = imuClassifyWhoAmI(id);
+            model_ = imuModelName(cls);
+            if (!imuSupported(cls)) {
                 fail(nowMs);
                 return true;
+            }
+            if (imuNeedsWarning(cls) && !idWarned) {
+                idWarned = true;
+                if (cls == ImuIdClass::Mpu6050Clone) {
+                    logPrintf("[imu] ВНИМАНИЕ: клон MPU-6050, WHO_AM_I=0x%02X, настройка как для 6050\n", id);
+                } else {
+                    logPrintf("[imu] ВНИМАНИЕ: WHO_AM_I=0x%02X, не 6050/6500, работаем как с совместимым\n", id);
+                }
             }
             if (!i2cbus::writeReg(IMU_I2C_ADDR, kRegPwrMgmt1, kPwrClockPllX) ||
                 !i2cbus::writeReg(IMU_I2C_ADDR, kRegSmplrtDiv, kSmplrtDiv1kHz) ||

@@ -11,6 +11,7 @@
 #include "config.h"
 #include "protocol.h"
 #include "rov_core/attitude.h"
+#include "rov_core/imu_id.h"
 #include "rov_core/link_supervisor.h"
 #include "rov_core/mixer.h"
 #include "rov_core/ms5837_math.h"
@@ -20,7 +21,7 @@
 #include "crc_ref.inc"
 
 // Общее число проверок CHECK во всех тестах (контроль, что ничего не потеряно)
-static const int EXPECTED_CHECKS = 269;
+static const int EXPECTED_CHECKS = 275;
 
 static int g_checks = 0;
 static char g_msg[256];
@@ -360,6 +361,27 @@ static void test_attitude(void) {
     CHECK(bo[0] == 2 && bo[1] == -3 && bo[2] == 1, "среднее смещения гироскопа посчитано неверно");
 }
 
+// ----------------------------------------------------------- WHO_AM_I IMU ----
+
+static void test_imu_who_am_i(void) {
+    CHECK(imuClassifyWhoAmI(0x68) == ImuIdClass::Mpu6050 && !imuNeedsWarning(ImuIdClass::Mpu6050),
+          "WHO_AM_I 0x68 должен быть MPU6050 без предупреждения");
+    CHECK(imuClassifyWhoAmI(0x72) == ImuIdClass::Mpu6050Clone && imuSupported(ImuIdClass::Mpu6050Clone),
+          "WHO_AM_I 0x72 должен быть поддерживаемым клоном MPU-6050");
+    CHECK(imuClassifyWhoAmI(0x98) == ImuIdClass::Mpu6050Clone && imuNeedsWarning(ImuIdClass::Mpu6050Clone),
+          "WHO_AM_I 0x98 должен быть клоном MPU-6050 с предупреждением");
+    CHECK(imuClassifyWhoAmI(0x70) == ImuIdClass::Mpu6500 && !imuNeedsWarning(ImuIdClass::Mpu6500),
+          "WHO_AM_I 0x70 должен быть MPU6500 без предупреждения");
+    CHECK(imuClassifyWhoAmI(0x71) == ImuIdClass::Mpu925x && imuClassifyWhoAmI(0x73) == ImuIdClass::Mpu925x,
+          "WHO_AM_I 0x71/0x73 должны быть совместимыми MPU925x");
+    bool unknownOk = true;
+    for (int id = 0; id < 256; id++) {
+        const bool known = id == 0x68 || id == 0x70 || id == 0x71 || id == 0x72 || id == 0x73 || id == 0x98;
+        if (imuSupported(imuClassifyWhoAmI((uint8_t)id)) != known) unknownOk = false;
+    }
+    CHECK(unknownOk, "поддерживаться должны только WHO_AM_I 0x68/0x70/0x71/0x72/0x73/0x98");
+}
+
 // ------------------------------------------------------------------ VBAT ----
 
 static void test_vbat(void) {
@@ -393,6 +415,7 @@ int main(int, char **) {
     RUN_TEST(test_ms5837_compensation);
     RUN_TEST(test_ms5837_crc4);
     RUN_TEST(test_attitude);
+    RUN_TEST(test_imu_who_am_i);
     RUN_TEST(test_vbat);
     RUN_TEST(test_all_checks_ran);
     return UNITY_END();
