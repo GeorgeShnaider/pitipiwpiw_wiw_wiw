@@ -22,6 +22,10 @@
 #define WIFI_AP_IP        192, 168, 4, 1
 #define WIFI_AP_MASK      255, 255, 255, 0
 
+// USB Serial (лог всех узлов), совпадает с monitor_speed в platformio.ini
+#define USB_LOG_BAUD      115200UL
+#define USB_LOG_TX_BUFFER 1024       // TX-буфер USB Serial: запись лога не ждёт FIFO
+
 // Fail-safe
 #define FAILSAFE_TIMEOUT_MS  500   // rov_core: нет валидного ControlPacket -> disarm + 1500 мкс
 #define BUOY_WS_TIMEOUT_MS   300   // buoy: нет cmd от WebApp -> шлёт вниз armed=0 и нули
@@ -50,6 +54,31 @@
 #define VBAT_CAL_K        1.000f     // поправка по мультиметру: Vреальное / Vизмеренное
 #define VBAT_WARN_V       14.0f      // 3.5 В/банку
 #define VBAT_CRIT_V       13.2f      // 3.3 В/банку
+
+#define VBAT_POLL_MS      100        // период чтения АЦП
+#define VBAT_AVG_WINDOW   16         // окно скользящего среднего, отсчётов
+
+// --- Датчики: тайминги автоматов ---
+#define I2C_TIMEOUT_MS        3      // таймаут транзакции Wire: висящая шина не держит loop
+#define MS5837_RESET_WAIT_MS  3      // после команды reset
+#define MS5837_CONV_WAIT_MS   20     // конверсия OSR 8192 (макс. 18.08 мс)
+#define MS5837_RETRY_MS       2000   // повторная инициализация после ошибки
+#define DEPTH_ZERO_MS         2000   // окно усреднения нуля глубины от первого валидного замера
+#define IMU_CALIB_MS          2000   // калибровка смещения гироскопа, аппарат неподвижен
+#define IMU_RETRY_MS          2000   // повторная инициализация после ошибки
+#define IMU_COMPL_ALPHA       0.98f  // комплементарный фильтр roll/pitch (≈1 с при 50 Гц)
+#define SENSOR_WARN_PERIOD_MS 5000   // период повтора предупреждений об отказах датчиков
+
+// Монтаж IMU: выход[i] = IMU_AXIS_SIGN[i] * сырая_ось[IMU_AXIS_MAP[i]].
+// Целевая СК аппарата: X — вперёд, Y — влево, Z — вверх. Уточнить по реальному монтажу.
+static const uint8_t IMU_AXIS_MAP[3]  = {0, 1, 2};
+static const int8_t  IMU_AXIS_SIGN[3] = {+1, +1, +1};
+
+// --- Индикация и лог ---
+#define STATUS_BLINK_SLOW_MS 500     // полупериод мигания: нет связи
+#define STATUS_BLINK_FAST_MS 100     // полупериод мигания: armed
+#define ROV_LOG_PERIOD_MS    1000    // период строки лога в USB Serial
+#define ROV_LOG_LINE_MAX     384     // максимум байт строки лога
 
 // --- Подсветка (LED-лента в отсеке 5 через N-MOSFET) ---
 #define LIGHT_PIN         4
@@ -116,6 +145,9 @@ static const float MIX[ESC_COUNT][AX_COUNT] = {
 #define BUOY_VIDEO_RX_PIN  18   // пара 4: видео от камеры (UART1, только приём)
 #define BUOY_STATUS_LED    2
 #define BUOY_VIDEO_RXBUF   16384  // размер RX-буфера UART1 под видеопоток
+#define BUOY_VIDEO_READ_CHUNK 4096U  // максимум байт видео из UART1 за один проход loop()
+#define BUOY_DIAG_PERIOD_MS   5000U  // диагностика в USB Serial
+#define BUOY_WS_CLEANUP_MS    1000U  // период ws.cleanupClients()
 
 // =============================================================================
 //  [CAM] ESP32-CAM AI-Thinker, OV2640 (отсек 5)
@@ -125,3 +157,14 @@ static const float MIX[ESC_COUNT][AX_COUNT] = {
 #define CAM_FRAME_SIZE     FRAMESIZE_QVGA   // 320x240; поднимать после замеров
 #define CAM_JPEG_QUALITY   12               // 0..63, меньше = лучше и больше байт
 #define CAM_TARGET_FPS     10
+#define CAM_FB_COUNT             2      // буферов кадра в PSRAM
+#define CAM_QUALITY_MIN          10     // лучшее quality при автоподстройке
+#define CAM_QUALITY_MAX          30     // худшее quality при автоподстройке
+#define CAM_QUALITY_STEP_UP      3      // ухудшение quality при кадре > VIDEO_MAX_FRAME
+#define CAM_QUALITY_RELAX_FRAMES 30     // столько подряд «маленьких» кадров -> quality на 1 лучше
+#define CAM_QUALITY_RELAX_PCT    50     // «маленький» кадр: меньше этой доли VIDEO_MAX_FRAME, %
+#define CAM_INIT_RETRY_MS        2000   // повтор инициализации камеры
+#define CAM_FB_FAIL_REINIT       10     // сбоев esp_camera_fb_get подряд -> переинициализация
+#define CAM_LOG_PERIOD_MS        5000   // период строки статистики
+#define CAM_VIDEO_TXBUF          8192   // TX-буфер UART1, байт
+#define CAM_TX_CHUNK_MIN         1024   // минимальная порция записи в UART1
