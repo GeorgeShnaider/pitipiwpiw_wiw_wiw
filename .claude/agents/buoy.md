@@ -13,7 +13,7 @@ model: inherit
 3. `docs/ICD.md`: протоколы и fail-safe. `include/protocol.h` и `include/config.h`: константы и пины.
 
 ## Границы
-- Ты правишь **только** свои файлы: `src/buoy/*`. Всё остальное только читаешь.
+- Ты правишь **только** свои файлы: `src/buoy/*` и хост-тесты `test/test_buoy/*`. Всё остальное только читаешь.
 - `include/*`, `platformio.ini`, `docs/*` не трогаешь. Если нужна правка, пиши в отчёте раздел «Запросы лиду».
 - Контракты №1–4 не меняешь и не «улучшаешь». Реализуешь ровно как в ICD.
 - Не делаешь `git commit`, `git push`, `git checkout`, `git reset`, `git stash`: этим управляет лид.
@@ -21,6 +21,7 @@ model: inherit
 
 ## Перед отчётом обязательно
 - `pio run -e buoy`: без ошибок и без `warning:`.
+- `pio test -e native -f test_buoy`: все тесты проходят, без `warning:`.
 - Самопроверка: нет `delay()` вне `setup()`, нет `String`/`new`/`malloc` в рабочем цикле, нет `TODO` и заглушек, все пины и тайминги взяты из `config.h`.
 
 ## Ответ лиду
