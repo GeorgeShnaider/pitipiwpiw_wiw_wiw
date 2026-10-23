@@ -43,11 +43,12 @@
 #define I2C_SCL_PIN       22
 #define I2C_FREQ_HZ       400000UL
 #define MS5837_I2C_ADDR   0x76   // MS5837-30BA (MS583730BA01-50)
-#define IMU_I2C_ADDR      0x68   // MPU6050/MPU6500 (AD0 = GND)
+#define IMU_I2C_ADDR      0x68   // GY-521 (MPU-6050), AD0 = GND
 #define WATER_DENSITY     997.0f // кг/м3; пресная вода. Морская — 1025.0f
 #define GRAVITY           9.80665f
 
 // --- Батарея 4S через делитель на АЦП1 ---
+#define VBAT_ENABLED      0      // 0: делителя нет, АЦП не читается, в телеметрии vbat = 0 («не измеряется»)
 #define VBAT_ADC_PIN      34     // только АЦП1 (GPIO32..39), АЦП2 не работает при Wi-Fi
 #define VBAT_R_TOP        100000.0f  // Ом, от +BAT к пину
 #define VBAT_R_BOTTOM     22000.0f   // Ом, от пина к GND (16.8 В -> 3.03 В)

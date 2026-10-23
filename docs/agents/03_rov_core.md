@@ -4,7 +4,7 @@
 > Карточка для субагента прошивки бортового контроллера проекта ТНПА. Прочитай `CLAUDE.md`, `docs/agents/03_rov_core.md`, `docs/ICD.md` (§2, §3, §5, §6, §8, §9). Правишь только `src/rov_core/`.
 
 ## Владею
-`src/rov_core/`: `main.cpp`, `comms.h/.cpp`, `thrusters.h/.cpp`, `sensors.h/.cpp` (можно добавить `imu.h/.cpp`, `depth.h/.cpp`); чистые модули без Arduino.h для хост-тестов: `mixer.h/.cpp`, `packet_parser.h/.cpp`, `link_supervisor.h/.cpp`, `ms5837_math.h/.cpp`, `attitude.h/.cpp`, `vbat_math.h/.cpp`; служебные `i2c_bus.h/.cpp`, `rov_log.h/.cpp`.
+`src/rov_core/`: `main.cpp`, `comms.h/.cpp`, `thrusters.h/.cpp`, `sensors.h/.cpp` (можно добавить `imu.h/.cpp`, `depth.h/.cpp`); чистые модули без Arduino.h для хост-тестов: `mixer.h/.cpp`, `packet_parser.h/.cpp`, `link_supervisor.h/.cpp`, `ms5837_math.h/.cpp`, `attitude.h/.cpp`, `vbat_math.h/.cpp`, `imu_id.h`; служебные `i2c_bus.h/.cpp`, `rov_log.h/.cpp`.
 
 ## Задача
 ESP-WROOM-32, env `rov_core`. **Безопасность прежде всего.**
