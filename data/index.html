@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>ТНПА — пульт</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;color:#e8eef2;
+ font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+ touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+body{position:fixed;inset:0}
+#video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none}
+#novideo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);color:#56656f;font-size:18px;pointer-events:none}
+#top{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+ padding:4px max(8px,env(safe-area-inset-right)) 4px max(8px,env(safe-area-inset-left));
+ background:rgba(0,0,0,.5);font-size:14px;line-height:1.2;pointer-events:none}
+.t{padding:3px 7px;border-radius:6px;background:rgba(255,255,255,.08);white-space:nowrap}
+.t b{font-size:16px;font-variant-numeric:tabular-nums}
+.t small{color:#9aabb6}
+#link{font-weight:700}
+body.stale .t b{opacity:.4}
+.ok{background:#1d6b35!important;color:#fff}
+.bad{background:#b3161b!important;color:#fff;animation:blink 1s steps(2) infinite}
+.warn{background:#a67400!important;color:#fff}
+@keyframes blink{50%{opacity:.45}}
+#sp{flex:1}
+#fs{pointer-events:auto;border:1px solid #6d7d88;background:rgba(0,0,0,.4);color:#e8eef2;border-radius:6px;
+ padding:5px 10px;font-size:14px}
+#hor{position:fixed;top:44px;left:50%;transform:translateX(-50%);width:124px;height:124px;pointer-events:none}
+#att{position:fixed;top:170px;left:50%;transform:translateX(-50%);font-size:13px;background:rgba(0,0,0,.5);
+ padding:2px 8px;border-radius:6px;white-space:nowrap;font-variant-numeric:tabular-nums;pointer-events:none}
+.joy{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));width:min(46vh,32vw);height:min(46vh,32vw);touch-action:none}
+#jl{left:max(10px,env(safe-area-inset-left))}
+#jr{right:max(10px,env(safe-area-inset-right))}
+.base{position:absolute;inset:10%;border-radius:50%;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.25)}
+.base:before,.base:after{content:"";position:absolute;background:rgba(255,255,255,.18)}
+.base:before{left:50%;top:6%;bottom:6%;width:1px}
+.base:after{top:50%;left:6%;right:6%;height:1px}
+.knob{position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:rgba(220,235,245,.7);
+ border:2px solid #fff;pointer-events:none;will-change:transform}
+.joy.act .base{border-color:#4fc3f7}
+.lbl{position:absolute;left:0;right:0;bottom:-2px;text-align:center;font-size:12px;color:#b8c6cf;pointer-events:none;
+ text-shadow:0 0 3px #000}
+.val{position:absolute;left:0;right:0;top:-2px;text-align:center;font-size:12px;color:#e8eef2;pointer-events:none;
+ text-shadow:0 0 3px #000;font-variant-numeric:tabular-nums}
+#btns{position:fixed;left:50%;bottom:max(12px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:12px}
+.btn{position:relative;overflow:hidden;width:min(19vw,128px);height:64px;border-radius:12px;border:2px solid #9aabb6;
+ background:rgba(30,40,48,.75);color:#fff;font-size:17px;font-weight:700;display:flex;align-items:center;
+ justify-content:center;text-align:center;line-height:1.1;touch-action:none}
+.btn span{position:relative}
+#arm .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:#c62828}
+#arm.on{background:#c62828;border-color:#ff8a80}
+#arm.dis{opacity:.45}
+#light.on{background:#f9a825;border-color:#fff59d;color:#000}
+#msg{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);font-size:12px;color:#c8d4dc;background:rgba(0,0,0,.5);
+ padding:2px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
+#rot{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.8);
+ padding:14px 18px;border-radius:10px;font-size:16px;text-align:center;pointer-events:none}
+@media (orientation:portrait){#rot{display:block}}
+</style>
+</head>
+<body>
+<img id="video" alt="">
+<div id="novideo">нет видео</div>
+
+<div id="top">
+ <span id="link" class="t bad">НЕТ СВЯЗИ</span>
+ <span class="t"><small>глуб.</small> <b id="vDepth">—</b> <small>м</small></span>
+ <span class="t"><small>темп.</small> <b id="vTemp">—</b> <small>°C</small></span>
+ <span id="bat" class="t"><small>АКБ</small> <b id="vBat">—</b> <small>В</small></span>
+ <span class="t"><small>курс</small> <b id="vYaw">—</b><small>° отн.</small></span>
+ <span class="t"><small>видео</small> <b id="vFps">0</b> <small>к/с</small></span>
+ <span id="sp"></span>
+ <span class="t"><small id="vWs">WS: —</small></span>
+ <button id="fs" type="button">⛶ Экран</button>
+</div>
+
+<canvas id="hor" width="124" height="124"></canvas>
+<div id="att">крен — ° · дифф. — °</div>
+
+<div id="jl" class="joy"><div class="base"></div><div class="knob"></div>
+ <div class="val" id="jlv">ход 0 · курс 0</div><div class="lbl">ХОД ↕ · КУРС ↔</div></div>
+<div id="jr" class="joy"><div class="base"></div><div class="knob"></div>
+ <div class="val" id="jrv">верт 0 · лаг 0</div><div class="lbl">ВЕРТ ↕ · ЛАГ ↔</div></div>
+
+<div id="msg">ARM: удерживать 1 с · DISARM: одно касание</div>
+<div id="btns">
+ <div id="arm" class="btn dis"><div class="fill"></div><span id="armTxt">ARM<br><small>держать 1 с</small></span></div>
+ <div id="light" class="btn"><span>СВЕТ</span></div>
+</div>
+
+<div id="rot">Поверните телефон горизонтально</div>
+
+<script>
+"use strict";
+(function () {
+  // ---------------------------------------------------------------------------
+  //  Константы (дубли config.h / protocol.h, менять только вместе с ними)
+  // ---------------------------------------------------------------------------
+  var WS_PATH = "/ws";              // protocol.h WS_PATH
+  var CMD_PERIOD_MS = 50;           // protocol.h WS_CMD_RATE_HZ = 20
+  var TELEM_STALE_MS = 1000;        // нет телеметрии дольше -> "НЕТ СВЯЗИ"
+  var RECONNECT_MS = 1000;          // переподключение раз в 1 с
+  var CONNECT_TIMEOUT_MS = 3000;    // зависшее подключение закрывается
+  var VBAT_WARN_V = 14.0;           // config.h VBAT_WARN_V
+  var VBAT_CRIT_V = 13.2;           // config.h VBAT_CRIT_V
+  var ARM_HOLD_MS = 1000;           // удержание кнопки ARM
+  var DEADZONE = 0.05;              // мёртвая зона джойстика
+  var EXPO = 0.4;                   // доля кубической составляющей кривой
+  var MAX_WS_BUFFERED = 1024;       // при застрявшем сокете не копим устаревшие команды
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------------------------------------------------------------------------
+  //  Состояние команды (контракт №1)
+  // ---------------------------------------------------------------------------
+  var armed = false;
+  var light = false;
+  var ws = null;
+  var wsOpenedAt = 0;
+  var lastTelem = -1e9;
+  var linkFresh = false;            // состояние индикатора связи на прошлом такте
+  var failReason = "";
+
+  // ---------------------------------------------------------------------------
+  //  Джойстики
+  // ---------------------------------------------------------------------------
+  function shape(v) {
+    var a = Math.abs(v);
+    if (a <= DEADZONE) return 0;
+    a = (a - DEADZONE) / (1 - DEADZONE);
+    if (a > 1) a = 1;
+    a = EXPO * a * a * a + (1 - EXPO) * a;
+    var r = Math.round(a * 100) / 100;
+    return v < 0 ? -r : r;
+  }
+
+  function Joy(el) {
+    var self = this;
+    this.el = el;
+    this.knob = el.querySelector(".knob");
+    this.id = null;
+    this.x = 0;   // вправо +
+    this.y = 0;   // вверх + (экранная ось Y инвертирована)
+    this.cx = 0; this.cy = 0; this.r = 1;
+
+    el.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      if (self.id !== null) return;
+      self.id = e.pointerId;
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* указатель уже отпущен */ }
+      var rc = el.getBoundingClientRect();
+      self.cx = rc.left + rc.width / 2;
+      self.cy = rc.top + rc.height / 2;
+      self.r = rc.width * 0.4 * 0.75;   // ход ручки: 75% радиуса базы
+      el.classList.add("act");
+      self.move(e);
+    });
+    el.addEventListener("pointermove", function (e) {
+      if (e.pointerId !== self.id) return;
+      e.preventDefault();
+      self.move(e);
+    });
+    var end = function (e) { if (e.pointerId === self.id) self.release(); };
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+    el.addEventListener("lostpointercapture", end);
+  }
+  Joy.prototype.move = function (e) {
+    var dx = (e.clientX - this.cx) / this.r;
+    var dy = (e.clientY - this.cy) / this.r;
+    var m = Math.sqrt(dx * dx + dy * dy);
+    if (m > 1) { dx /= m; dy /= m; }
+    this.x = dx;
+    this.y = -dy;
+    this.knob.style.transform = "translate(" + (dx * this.r) + "px," + (dy * this.r) + "px)";
+  };
+  Joy.prototype.release = function () {
+    if (this.id !== null) {
+      var pid = this.id;
+      this.id = null;
+      try { if (this.el.hasPointerCapture(pid)) this.el.releasePointerCapture(pid); } catch (err) { /* нет захвата */ }
+    }
+    this.x = 0; this.y = 0;
+    this.el.classList.remove("act");
+    this.knob.style.transform = "translate(0px,0px)";
+  };
+
+  var joyL = new Joy($("jl"));   // surge (вертикаль), yaw (горизонталь)
+  var joyR = new Joy($("jr"));   // heave (вертикаль), sway (горизонталь)
+
+  function axes() {
+    return {
+      surge: shape(joyL.y),
+      yaw: shape(joyL.x),
+      heave: shape(joyR.y),
+      sway: shape(joyR.x)
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Fail-safe: armed=false, оси 0, джойстики отпущены
+  // ---------------------------------------------------------------------------
+  function failsafe(reason) {
+    armed = false;
+    holdCancel();
+    joyL.release();
+    joyR.release();
+    failReason = reason;
+    renderButtons();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Кнопки: ARM — удержание 1 с, DISARM — мгновенно по касанию
+  // ---------------------------------------------------------------------------
+  var armBtn = $("arm"), armFill = armBtn.querySelector(".fill");
+  var holdId = null, holdStart = 0, holdTimer = 0;
+
+  function wsOpen() { return ws !== null && ws.readyState === WebSocket.OPEN; }
+  // Связь годна: сокет открыт и телеметрия не старше 1 с (ICD §8)
+  function telemFresh() { return wsOpen() && (performance.now() - lastTelem) <= TELEM_STALE_MS; }
+
+  function holdCancel() {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
+    holdId = null;
+    armFill.style.width = "0";
+  }
+
+  armBtn.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (armed) {               // снятие с охраны без удержания
+      armed = false;
+      failReason = "";
+      holdCancel();
+      renderButtons();
+      return;
+    }
+    if (!telemFresh() || holdId !== null) return;
+    holdId = e.pointerId;
+    try { armBtn.setPointerCapture(e.pointerId); } catch (err) { /* указатель уже отпущен */ }
+    holdStart = performance.now();
+    holdTimer = setTimeout(function () {
+      holdTimer = 0;
+      holdId = null;
+      armFill.style.width = "0";
+      if (telemFresh() && document.visibilityState === "visible") {
+        armed = true;
+        failReason = "";
+      }
+      renderButtons();
+    }, ARM_HOLD_MS);
+  });
+  var armEnd = function (e) { if (e.pointerId === holdId) holdCancel(); };
+  armBtn.addEventListener("pointerup", armEnd);
+  armBtn.addEventListener("pointercancel", armEnd);
+  armBtn.addEventListener("lostpointercapture", armEnd);
+
+  $("light").addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    light = !light;
+    renderButtons();
+  });
+
+  var armShown = false;
+  function renderButtons() {
+    armBtn.classList.toggle("on", armed);
+    armBtn.classList.toggle("dis", !armed && !telemFresh());
+    if (armShown !== armed) {
+      armShown = armed;
+      $("armTxt").innerHTML = armed ? "DISARM<br><small>коснуться</small>" : "ARM<br><small>держать 1 с</small>";
+    }
+    $("light").classList.toggle("on", light);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Полный экран и альбомная ориентация
+  // ---------------------------------------------------------------------------
+  $("fs").addEventListener("pointerup", function (e) {
+    e.preventDefault();
+    var d = document, el = d.documentElement;
+    var isFs = d.fullscreenElement || d.webkitFullscreenElement;
+    try {
+      if (isFs) {
+        (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+        return;
+      }
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) { $("msg").textContent = "Полный экран не поддерживается: «На экран Домой»"; return; }
+      var p = req.call(el, { navigationUI: "hide" });
+      var lock = function () {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock("landscape").catch(function () { /* блокировка не поддерживается */ });
+        }
+      };
+      if (p && p.then) p.then(lock).catch(function () { /* отказ браузера */ }); else lock();
+    } catch (err) { /* браузер без Fullscreen API */ }
+  });
+
+  // ---------------------------------------------------------------------------
+  //  Видео: binary WS -> Blob -> objectURL -> <img>
+  // ---------------------------------------------------------------------------
+  var img = $("video");
+  var curUrl = null, nextBlob = null, decoding = false, frames = 0, fps = 0, fpsT = performance.now();
+
+  function showBlob(b) {
+    decoding = true;
+    img.src = URL.createObjectURL(b);
+  }
+  function frameDone(ok) {
+    var prev = curUrl;
+    curUrl = img.src;
+    if (prev) URL.revokeObjectURL(prev);
+    if (ok) { frames++; $("novideo").style.display = "none"; }
+    decoding = false;
+    if (nextBlob) { var b = nextBlob; nextBlob = null; showBlob(b); }
+  }
+  img.onload = function () { frameDone(true); };
+  img.onerror = function () { frameDone(false); };
+
+  function onFrame(buf) {
+    var b = new Blob([buf], { type: "image/jpeg" });
+    if (decoding) nextBlob = b;   // пока декодируется кадр — держим только самый свежий
+    else showBlob(b);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Телеметрия (контракт №3)
+  // ---------------------------------------------------------------------------
+  var KEYS = ["depth", "temp", "vbat", "roll", "pitch", "yaw"];
+  var tel = null;
+
+  function onTelemetry(s) {
+    var o;
+    try { o = JSON.parse(s); } catch (err) { return; }
+    if (!o || typeof o !== "object") return;
+    for (var i = 0; i < KEYS.length; i++) {
+      var v = o[KEYS[i]];
+      if (typeof v !== "number" || !isFinite(v)) return;
+    }
+    tel = o;
+    lastTelem = performance.now();
+    $("vDepth").textContent = o.depth.toFixed(2);
+    $("vTemp").textContent = o.temp.toFixed(1);
+    $("vBat").textContent = o.vbat.toFixed(2);
+    var y = o.yaw % 360; if (y < 0) y += 360;
+    $("vYaw").textContent = y.toFixed(0);
+    var bat = $("bat");
+    bat.classList.toggle("ok", o.vbat >= VBAT_WARN_V);
+    bat.classList.toggle("warn", o.vbat < VBAT_WARN_V && o.vbat >= VBAT_CRIT_V);
+    bat.classList.toggle("bad", o.vbat < VBAT_CRIT_V);
+    $("att").textContent = "крен " + o.roll.toFixed(1) + "° · дифф. " + o.pitch.toFixed(1) + "°";
+    drawHorizon(o.roll, o.pitch);
+  }
+
+  // Авиагоризонт: небо/земля, поворот на -крен, сдвиг по дифференту
+  var hc = $("hor"), hx = hc.getContext("2d");
+  (function () {
+    var dpr = window.devicePixelRatio || 1;
+    hc.width = 124 * dpr; hc.height = 124 * dpr;
+    hx.scale(dpr, dpr);
+  })();
+  function drawHorizon(roll, pitch) {
+    var S = 124, c = S / 2, R = c - 2, pxPerDeg = R / 45;
+    hx.clearRect(0, 0, S, S);
+    hx.save();
+    hx.beginPath(); hx.arc(c, c, R, 0, Math.PI * 2); hx.clip();
+    hx.translate(c, c);
+    hx.rotate(-roll * Math.PI / 180);
+    var off = Math.max(-R * 1.5, Math.min(R * 1.5, pitch * pxPerDeg));
+    hx.fillStyle = "rgba(41,121,201,.8)"; hx.fillRect(-S, -S * 2 + off, S * 2, S * 2);
+    hx.fillStyle = "rgba(140,90,40,.85)"; hx.fillRect(-S, off, S * 2, S * 2);
+    hx.strokeStyle = "#fff"; hx.lineWidth = 1.5;
+    hx.beginPath(); hx.moveTo(-S, off); hx.lineTo(S, off); hx.stroke();
+    hx.lineWidth = 1; hx.font = "9px sans-serif"; hx.fillStyle = "#fff"; hx.textAlign = "left";
+    for (var p = -30; p <= 30; p += 10) {
+      if (p === 0) continue;
+      var yy = off - p * pxPerDeg, w = 14;
+      hx.beginPath(); hx.moveTo(-w, yy); hx.lineTo(w, yy); hx.stroke();
+      hx.fillText(String(p), w + 2, yy + 3);
+    }
+    hx.restore();
+    hx.strokeStyle = "#ffd600"; hx.lineWidth = 3;
+    hx.beginPath(); hx.moveTo(c - 34, c); hx.lineTo(c - 10, c); hx.lineTo(c, c + 8); hx.lineTo(c + 10, c); hx.lineTo(c + 34, c); hx.stroke();
+    hx.strokeStyle = "rgba(255,255,255,.7)"; hx.lineWidth = 2;
+    hx.beginPath(); hx.arc(c, c, R, 0, Math.PI * 2); hx.stroke();
+  }
+  drawHorizon(0, 0);
+
+  // ---------------------------------------------------------------------------
+  //  WebSocket: подключение, переподключение раз в 1 с
+  // ---------------------------------------------------------------------------
+  function connect() {
+    var proto = location.protocol === "https:" ? "wss://" : "ws://";
+    var s;
+    try { s = new WebSocket(proto + location.host + WS_PATH); } catch (err) { ws = null; return; }
+    s.binaryType = "arraybuffer";
+    ws = s;
+    wsOpenedAt = performance.now();
+    s.onopen = function () { if (s === ws) renderButtons(); };
+    s.onmessage = function (ev) {
+      if (s !== ws) return;
+      if (typeof ev.data === "string") onTelemetry(ev.data);
+      else onFrame(ev.data);
+    };
+    s.onerror = function () { if (s === ws) failsafe("ошибка WS"); };
+    s.onclose = function () {
+      if (s !== ws) return;
+      ws = null;
+      lastTelem = -1e9;
+      failsafe("WS закрыт");
+    };
+  }
+
+  setInterval(function () {
+    if (ws === null) { connect(); return; }
+    if (ws.readyState === WebSocket.CONNECTING && performance.now() - wsOpenedAt > CONNECT_TIMEOUT_MS) {
+      var s = ws; ws = null;
+      try { s.close(); } catch (err) { /* сокет уже закрыт */ }
+      failsafe("таймаут подключения");
+    }
+  }, RECONNECT_MS);
+
+  // ---------------------------------------------------------------------------
+  //  Heartbeat: команда строго каждые 50 мс, только при открытом сокете
+  // ---------------------------------------------------------------------------
+  setInterval(function () {
+    var a = axes();
+    $("jlv").textContent = "ход " + a.surge.toFixed(2) + " · курс " + a.yaw.toFixed(2);
+    $("jrv").textContent = "верт " + a.heave.toFixed(2) + " · лаг " + a.sway.toFixed(2);
+    if (!wsOpen()) return;
+    if (ws.bufferedAmount > MAX_WS_BUFFERED) return;
+    ws.send(JSON.stringify({
+      type: "cmd",
+      armed: armed === true,
+      light: light === true,
+      axes: { surge: a.surge, yaw: a.yaw, heave: a.heave, sway: a.sway }
+    }));
+  }, CMD_PERIOD_MS);
+
+  // ---------------------------------------------------------------------------
+  //  Индикатор связи и счётчик к/с
+  // ---------------------------------------------------------------------------
+  setInterval(function () {
+    var now = performance.now();
+    var fresh = telemFresh();
+    // Телеметрия устарела при открытом WS: fail-safe один раз на переходе,
+    // взвод заблокирован до восстановления, автоматически не взводимся
+    if (!fresh && (linkFresh || armed)) failsafe(wsOpen() ? "нет телеметрии" : "нет связи");
+    if (!fresh && holdId !== null) holdCancel();
+    linkFresh = fresh;
+    var link = $("link");
+    link.textContent = fresh ? "СВЯЗЬ" : "НЕТ СВЯЗИ";
+    link.classList.toggle("ok", fresh);
+    link.classList.toggle("bad", !fresh);
+    document.body.classList.toggle("stale", !fresh);
+    var st = ws === null ? "нет" : (ws.readyState === WebSocket.OPEN ? "открыт" :
+      (ws.readyState === WebSocket.CONNECTING ? "подключение" : "закрыт"));
+    $("vWs").textContent = "WS: " + st;
+    if (now - fpsT >= 1000) {
+      fps = frames * 1000 / (now - fpsT);
+      frames = 0; fpsT = now;
+      $("vFps").textContent = fps.toFixed(0);
+    }
+    if (holdId !== null) {
+      armFill.style.width = Math.min(100, (now - holdStart) * 100 / ARM_HOLD_MS) + "%";
+    }
+    $("msg").textContent = armed ? "ВЗВЕДЕНО · DISARM: одно касание" :
+      (!fresh ? ("ARM заблокирован: нет телеметрии" + (failReason ? " · снято: " + failReason : "")) :
+      (failReason ? ("Снято с охраны: " + failReason + " · ARM: удерживать 1 с") :
+      "ARM: удерживать 1 с · DISARM: одно касание"));
+    renderButtons();
+  }, 100);
+
+  // ---------------------------------------------------------------------------
+  //  Сворачивание вкладки, запрет масштабирования и контекстного меню
+  // ---------------------------------------------------------------------------
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") failsafe("вкладка скрыта");
+  });
+  window.addEventListener("pagehide", function () { failsafe("страница закрыта"); });
+  window.addEventListener("blur", function () { joyL.release(); joyR.release(); holdCancel(); });
+
+  var stop = function (e) { e.preventDefault(); };
+  document.addEventListener("touchstart", stop, { passive: false });
+  document.addEventListener("touchmove", stop, { passive: false });
+  document.addEventListener("gesturestart", stop, { passive: false });
+  document.addEventListener("dblclick", stop);
+  document.addEventListener("contextmenu", stop);
+
+  renderButtons();
+  connect();
+})();
+</script>
+</body>
+</html>
