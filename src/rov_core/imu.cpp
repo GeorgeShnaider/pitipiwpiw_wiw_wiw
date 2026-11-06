@@ -83,9 +83,20 @@ bool Mpu6050Imu::update(uint32_t nowMs) {
             return false;
 
         case State::Probe: {
+            // Сначала дешёвые проверки: свободна ли шина и отвечает ли адрес
+            if (!i2cbus::busIdle()) {
+                model_ = "шина I2C занята";
+                fail(nowMs);
+                return false;
+            }
+            if (!i2cbus::probe(IMU_I2C_ADDR)) {
+                model_ = "не найден";
+                fail(nowMs);
+                return true;
+            }
             uint8_t id = 0;
             if (!i2cbus::readRegs(IMU_I2C_ADDR, kRegWhoAmI, &id, 1)) {
-                model_ = "не найден";
+                model_ = "ошибка чтения WHO_AM_I";
                 fail(nowMs);
                 return true;
             }

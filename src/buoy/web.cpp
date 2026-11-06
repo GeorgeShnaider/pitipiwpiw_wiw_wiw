@@ -10,6 +10,7 @@
 #include <WiFi.h>
 #include <freertos/FreeRTOS.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <atomic>
 #include <memory>
@@ -177,10 +178,27 @@ void mountFs() {
         indexSource = IndexSource::None;
         return;
     }
-    if (LittleFS.exists(kIndexGzPath)) {
+    // LittleFS.exists() в core 2.0.x реализован через open() и логирует ошибку
+    // vfs_api на отсутствующем файле, поэтому один раз обходим корень и сверяем пути
+    bool hasGz = false;
+    bool hasPlain = false;
+    File root = LittleFS.open("/");
+    if (root && root.isDirectory()) {
+        for (File f = root.openNextFile(); f; f = root.openNextFile()) {
+            if (!f.isDirectory()) {
+                const char *path = f.path();
+                if (path != nullptr && strcmp(path, kIndexGzPath) == 0) hasGz = true;
+                if (path != nullptr && strcmp(path, kIndexPath) == 0) hasPlain = true;
+            }
+            f.close();
+        }
+    }
+    root.close();
+
+    if (hasGz) {
         indexSource = IndexSource::Gzip;
         logLine("[buoy] LittleFS: отдаю %s (gzip)", kIndexGzPath);
-    } else if (LittleFS.exists(kIndexPath)) {
+    } else if (hasPlain) {
         indexSource = IndexSource::Plain;
         logLine("[buoy] LittleFS: отдаю %s", kIndexPath);
     } else {

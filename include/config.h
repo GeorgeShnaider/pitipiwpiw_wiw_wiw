@@ -61,6 +61,7 @@
 
 // --- Датчики: тайминги автоматов ---
 #define I2C_TIMEOUT_MS        3      // таймаут транзакции Wire: висящая шина не держит loop
+#define I2C_HW_BIT_TIMEOUT_US 200    // аппаратный таймаут бита I2C (по умолчанию ядра ~13 мс)
 #define MS5837_RESET_WAIT_MS  3      // после команды reset
 #define MS5837_CONV_WAIT_MS   20     // конверсия OSR 8192 (макс. 18.08 мс)
 #define MS5837_RETRY_MS       2000   // повторная инициализация после ошибки
@@ -89,9 +90,10 @@ static const int8_t  IMU_AXIS_SIGN[3] = {+1, +1, +1};
 #define ESC_COUNT         6
 #define ESC_PWM_FREQ_HZ   50
 #define ESC_PWM_RES_BITS  16
-#define ESC_US_MIN        1000   // полный реверс (ESC прошиты BLHeli_S Bidirectional!)
-#define ESC_US_NEUTRAL    1500   // стоп
-#define ESC_US_MAX        2000   // полный вперёд
+#define ESC_US_MIN        1100   // полный реверс = PPM Min Throttle в BLHeliSuite (Bidirectional)
+#define ESC_US_NEUTRAL    1500   // стоп = PPM Center Throttle в BLHeliSuite
+#define ESC_US_MAX        1900   // полный вперёд = PPM Max Throttle в BLHeliSuite
+static_assert(2 * ESC_US_NEUTRAL == ESC_US_MIN + ESC_US_MAX, "ESC_US_NEUTRAL должен быть посередине ESC_US_MIN..ESC_US_MAX (как PPM Center в BLHeliSuite)");
 #define ESC_DEADBAND      0.05f  // |команда| меньше порога -> строго 1500 мкс
 #define ESC_ARM_TIME_MS   3000   // после старта держать 1500 мкс, пока ESC инициализируются
 #define THRUST_LIMIT      0.50f  // общий ограничитель тяги 0..1 (на первых испытаниях 50%)

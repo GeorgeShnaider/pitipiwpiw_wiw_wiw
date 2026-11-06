@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PROTOCOL_VERSION 1
+#define PROTOCOL_VERSION 2   // v2: в телеметрию (контракт №3) добавлен ключ armed (D-010)
 
 // -----------------------------------------------------------------------------
 //  Скорости линий кабеля (UART поверх RS-485)
@@ -87,9 +87,10 @@ inline bool controlPacketValid(const ControlPacket &p) {
 // -----------------------------------------------------------------------------
 #define TELEMETRY_RATE_HZ   10
 #define TELEMETRY_MAX_LEN   160   // максимум байт в строке, включая '\n'
-// Формат для snprintf на стороне rov_core: depth[m], temp[°C], vbat[V], roll/pitch/yaw[deg]
+// Формат для snprintf на стороне rov_core: depth[m], temp[°C], vbat[V], roll/pitch/yaw[deg],
+// armed — фактическое состояние ROV_CORE (int: 0 или 1)
 #define TELEMETRY_JSON_FMT \
-    "{\"depth\":%.2f,\"temp\":%.1f,\"vbat\":%.2f,\"roll\":%.1f,\"pitch\":%.1f,\"yaw\":%.1f}\n"
+    "{\"depth\":%.2f,\"temp\":%.1f,\"vbat\":%.2f,\"roll\":%.1f,\"pitch\":%.1f,\"yaw\":%.1f,\"armed\":%d}\n"
 
 // -----------------------------------------------------------------------------
 //  Контракт №4. Камера -> Буй, UART binary (пара 4); Буй -> WebApp, WS binary

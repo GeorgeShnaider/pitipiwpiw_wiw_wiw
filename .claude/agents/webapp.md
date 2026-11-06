@@ -2,7 +2,7 @@
 name: webapp
 description: "Разработка WebApp для смартфона (data/index.html) и эмулятора буя tools/mock_buoy.py. Вызывается лидом проекта ТНПА с конкретным этапом из docs/agents/01_webapp.md."
 tools: Read, Write, Edit, Glob, Grep, Bash
-model: inherit
+model: sonnet
 ---
 
 Ты субагент «webapp» проекта ТНПА (мелководный подводный аппарат с надводным буем). Задачи тебе ставит лид, отчёт возвращаешь ему же.

@@ -4,7 +4,8 @@
 Один порт обслуживает и HTTP, и WebSocket:
   GET /  (и /index.html)  -> data/index.html (перечитывается при каждом запросе)
   WS  /ws                 -> принимает cmd (контракт №1), шлёт телеметрию
-                             (контракт №3, 10 Гц) и JPEG-кадры (контракт №4, binary)
+                             (контракт №3 v2 с armed ТНПА, 10 Гц) и JPEG-кадры
+                             (контракт №4, binary)
 
 Зависимость: websockets >= 13. Pillow не обязателен: без него кадры
 строятся встроенным JPEG-кодером (мозаика 8x8, только DC-коэффициенты).
@@ -36,6 +37,8 @@ try:
 except ImportError:
     HAVE_PIL = False
 
+from jpeg_mini import builtin_frame  # общий JPEG-кодер, tools/jpeg_mini.py
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_HTML = os.path.join(ROOT, "data", "index.html")
 
@@ -46,136 +49,15 @@ TELEMETRY_RATE_HZ = 10          # protocol.h TELEMETRY_RATE_HZ
 TELEMETRY_MAX_LEN = 160         # protocol.h TELEMETRY_MAX_LEN (с '\n')
 VIDEO_MAX_FRAME = 32768         # protocol.h VIDEO_MAX_FRAME
 BUOY_WS_TIMEOUT_MS = 300        # config.h BUOY_WS_TIMEOUT_MS
-# Формат protocol.h TELEMETRY_JSON_FMT без завершающего '\n' (буй его отрезает)
+# Формат protocol.h TELEMETRY_JSON_FMT (протокол v2, D-010) без завершающего '\n' (буй его отрезает)
 TELEMETRY_FMT = ('{"depth":%.2f,"temp":%.1f,"vbat":%.2f,'
-                 '"roll":%.1f,"pitch":%.1f,"yaw":%.1f}')
+                 '"roll":%.1f,"pitch":%.1f,"yaw":%.1f,"armed":%d}')
+# Формат протокола v1 (без armed) — для проверки совместимости WebApp, флаг --no-armed
+TELEMETRY_FMT_V1 = ('{"depth":%.2f,"temp":%.1f,"vbat":%.2f,'
+                    '"roll":%.1f,"pitch":%.1f,"yaw":%.1f}')
+ROV_ARMED_DELAY_S = 0.1         # mock: ТНПА отражает armed из cmd с задержкой (пакет + телеметрия)
 CMD_KEYS = ["type", "armed", "light", "axes"]
 AXIS_KEYS = ["surge", "yaw", "heave", "sway"]
-
-
-# =============================================================================
-#  Минимальный baseline-JPEG кодер (без Pillow): каждый блок 8x8 залит одним
-#  цветом, кодируется только DC, все AC = 0 (EOB). YCbCr 4:4:4.
-# =============================================================================
-_DC_BITS = [0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
-_DC_VALS = list(range(12))
-_AC_BITS = [1] + [0] * 15       # единственный символ 0x00 (EOB), код "0"
-_AC_VALS = [0x00]
-_DC_Q = 8                       # DC = 8*(v-128) -> квантованное = v-128
-
-
-def _huff_codes(bits, vals):
-    codes = {}
-    code = 0
-    k = 0
-    for length in range(1, 17):
-        for _ in range(bits[length - 1]):
-            codes[vals[k]] = (code, length)
-            code += 1
-            k += 1
-        code <<= 1
-    return codes
-
-
-_DC_CODES = _huff_codes(_DC_BITS, _DC_VALS)
-_AC_EOB = _huff_codes(_AC_BITS, _AC_VALS)[0]
-
-
-class _BitWriter:
-    def __init__(self):
-        self.out = bytearray()
-        self.acc = 0
-        self.n = 0
-
-    def put(self, value, length):
-        self.acc = (self.acc << length) | (value & ((1 << length) - 1))
-        self.n += length
-        while self.n >= 8:
-            self.n -= 8
-            b = (self.acc >> self.n) & 0xFF
-            self.out.append(b)
-            if b == 0xFF:
-                self.out.append(0x00)
-        self.acc &= (1 << self.n) - 1
-
-    def flush(self):
-        if self.n:
-            self.put((1 << (8 - self.n)) - 1, 8 - self.n)
-
-
-def _seg(marker, payload):
-    return bytes([0xFF, marker]) + (len(payload) + 2).to_bytes(2, "big") + payload
-
-
-def encode_blocks_jpeg(blocks, bw, bh):
-    """blocks: список (r, g, b) длиной bw*bh, построчно. Размер кадра 8bw x 8bh."""
-    w, h = bw * 8, bh * 8
-    out = bytearray(b"\xFF\xD8")
-    out += _seg(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
-    out += _seg(0xDB, bytes([0x00]) + bytes([_DC_Q] * 64))
-    out += _seg(0xC0, bytes([8]) + h.to_bytes(2, "big") + w.to_bytes(2, "big") +
-                bytes([3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0]))
-    out += _seg(0xC4, bytes([0x00] + _DC_BITS + _DC_VALS))
-    out += _seg(0xC4, bytes([0x10] + _AC_BITS + _AC_VALS))
-    out += _seg(0xDA, bytes([3, 1, 0x00, 2, 0x00, 3, 0x00, 0, 63, 0]))
-    bwr = _BitWriter()
-    pred = [0, 0, 0]
-    eob_code, eob_len = _AC_EOB
-    for (r, g, b) in blocks:
-        y = 0.299 * r + 0.587 * g + 0.114 * b
-        cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b
-        cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b
-        for i, v in enumerate((y, cb, cr)):
-            dc = int(round(max(0.0, min(255.0, v)))) - 128
-            diff = dc - pred[i]
-            pred[i] = dc
-            mag = abs(diff)
-            cat = mag.bit_length()
-            code, length = _DC_CODES[cat]
-            bwr.put(code, length)
-            if cat:
-                bwr.put(diff if diff >= 0 else diff + (1 << cat) - 1, cat)
-            bwr.put(eob_code, eob_len)
-    bwr.flush()
-    out += bwr.out
-    out += b"\xFF\xD9"
-    return bytes(out)
-
-
-# Шрифт 3x5 для цифр (номер кадра на мозаике)
-_FONT = {
-    "0": ["111", "101", "101", "101", "111"], "1": ["010", "110", "010", "010", "111"],
-    "2": ["111", "001", "111", "100", "111"], "3": ["111", "001", "111", "001", "111"],
-    "4": ["101", "101", "111", "001", "001"], "5": ["111", "100", "111", "001", "111"],
-    "6": ["111", "100", "111", "101", "111"], "7": ["111", "001", "010", "010", "010"],
-    "8": ["111", "101", "111", "101", "111"], "9": ["111", "101", "111", "001", "111"],
-}
-
-
-def builtin_frame(n, t, bw=40, bh=30):
-    """Тестовый кадр 320x240: градиент, бегущая полоса, перекрестие, номер кадра."""
-    blocks = []
-    bar = int((t * 8) % bw)
-    for by in range(bh):
-        for bx in range(bw):
-            r = int(20 + 40 * by / bh)
-            g = int(60 + 80 * (0.5 + 0.5 * math.sin(t + bx * 0.2)))
-            b = int(110 + 100 * by / bh)
-            if bx == bar or bx == (bar + 1) % bw:
-                r, g, b = 240, 200, 40
-            if bx == bw // 2 or by == bh // 2:
-                r, g, b = 230, 230, 230
-            blocks.append((r, g, b))
-    text = str(n % 100000)
-    x0, y0 = 2, 2
-    for ch in text:
-        glyph = _FONT[ch]
-        for gy, row in enumerate(glyph):
-            for gx, bit in enumerate(row):
-                if bit == "1":
-                    blocks[(y0 + gy) * bw + x0 + gx] = (255, 255, 255)
-        x0 += 4
-    return encode_blocks_jpeg(blocks, bw, bh)
 
 
 def pil_frame(n, t):
@@ -273,6 +155,45 @@ def validate_cmd(text):
 
 
 # =============================================================================
+#  Упрощённая модель фактического armed ТНПА (ключ armed телеметрии, D-010)
+# =============================================================================
+class RovModel:
+    """armed ТНПА = armed последней cmd с задержкой ROV_ARMED_DELAY_S.
+
+    Нет cmd дольше BUOY_WS_TIMEOUT_MS — буй шлёт вниз armed=0, ТНПА не взведён.
+    --rov-disarm-after N: через N с после взвода ТНПА перестаёт видеть команды
+    (обрыв линии вниз) и сообщает armed:0, пока cmd не сбросит armed.
+    """
+
+    def __init__(self, disarm_after):
+        self.disarm_after = disarm_after
+        self.hist = []          # (t, armed, момент фронта) по принятым cmd
+        self.rise_t = None      # момент фронта armed 0->1 в cmd
+        self.cmd_armed = False
+
+    def on_cmd(self, armed, now):
+        if armed and not self.cmd_armed:
+            self.rise_t = now
+        if not armed:
+            self.rise_t = None
+        self.cmd_armed = armed
+        self.hist.append((now, armed, self.rise_t))
+
+    def armed(self, now):
+        t_ref = now - ROV_ARMED_DELAY_S
+        while len(self.hist) > 1 and self.hist[1][0] <= t_ref:
+            self.hist.pop(0)
+        if not self.hist or self.hist[0][0] > t_ref:
+            return 0
+        t_cmd, a, rise_t = self.hist[0]
+        if (t_ref - t_cmd) * 1000.0 > BUOY_WS_TIMEOUT_MS:
+            return 0
+        if a and self.disarm_after > 0 and rise_t is not None and t_ref - rise_t >= self.disarm_after:
+            return 0
+        return 1 if a else 0
+
+
+# =============================================================================
 #  Сервер
 # =============================================================================
 class Mock:
@@ -292,7 +213,7 @@ class Mock:
         ph = (time.monotonic() - self.t0) % self.args.drop_period
         return ph >= self.args.drop_period - self.args.drop_len
 
-    def telemetry(self):
+    def telemetry(self, rov_armed):
         t = time.monotonic() - self.t0
         depth = max(0.0, 2.5 + 2.4 * math.sin(t * 0.15))
         temp = 18.0 + 1.5 * math.sin(t * 0.05)
@@ -303,7 +224,10 @@ class Mock:
         roll = 25.0 * math.sin(t * 0.7)
         pitch = 15.0 * math.sin(t * 0.43 + 1.0)
         yaw = (t * 12.0) % 360.0
-        s = TELEMETRY_FMT % (depth, temp, vbat, roll, pitch, yaw)
+        if self.args.no_armed:
+            s = TELEMETRY_FMT_V1 % (depth, temp, vbat, roll, pitch, yaw)
+        else:
+            s = TELEMETRY_FMT % (depth, temp, vbat, roll, pitch, yaw, rov_armed)
         assert len(s) + 1 <= TELEMETRY_MAX_LEN
         return s
 
@@ -347,6 +271,7 @@ class Mock:
         print("[ws] подключён %s (клиентов: %d)" % (peer, self.clients))
         ws.stat = {"n": 0, "bad": 0, "dtmin": None, "dtmax": 0.0, "last": None,
                    "last_t": None, "armed": False, "light": False, "gaps": 0}
+        ws.rov = RovModel(self.args.rov_disarm_after)
         tasks = [asyncio.ensure_future(self.telemetry_loop(ws)),
                  asyncio.ensure_future(self.video_loop(ws)),
                  asyncio.ensure_future(self.stats_loop(ws))]
@@ -382,6 +307,7 @@ class Mock:
             st["bad"] += 1
             print("[cmd] WARN: %s | %s" % ("; ".join(errs), msg[:200]))
             return
+        ws.rov.on_cmd(cmd["armed"], now)
         if cmd["armed"] != st["armed"]:
             print("[cmd] armed: %s -> %s" % (st["armed"], cmd["armed"]))
             st["armed"] = cmd["armed"]
@@ -413,13 +339,20 @@ class Mock:
     async def telemetry_loop(self, ws):
         period = 1.0 / TELEMETRY_RATE_HZ
         nxt = time.monotonic()
+        shown = 0
         while True:
             nxt += period
+            rov_armed = ws.rov.armed(time.monotonic())
+            if rov_armed != shown and not self.args.no_armed:
+                print("[rov] armed ТНПА: %d -> %d" % (shown, rov_armed))
+                shown = rov_armed
             if not self.silent():
-                await ws.send(self.telemetry())
+                await ws.send(self.telemetry(rov_armed))
             await asyncio.sleep(max(0.0, nxt - time.monotonic()))
 
     async def video_loop(self, ws):
+        if self.args.fps == 0:
+            return   # --fps 0: камеры нет, WebApp показывает заглушку «нет видео»
         period = 1.0 / self.args.fps
         nxt = time.monotonic()
         while True:
@@ -457,10 +390,13 @@ async def main_async(args):
     async with serve(mock.handler, args.host, args.port,
                      process_request=mock.process_request,
                      max_size=4096, compression=None):
-        print("Mock буя слушает %s:%d  (видео: %s, %.1f к/с%s%s)"
+        print("Mock буя слушает %s:%d  (видео: %s, %.1f к/с%s%s%s)"
               % (args.host, args.port, src, args.fps,
                  ", DROP %.0f из %.0f с" % (args.drop_len, args.drop_period) if args.drop else "",
-                 ", vbat=0 (не измеряется)" if args.no_vbat else ""))
+                 ", vbat=0 (не измеряется)" if args.no_vbat else "",
+                 ", телеметрия v1 без armed" if args.no_armed else
+                 (", ТНПА теряет команды через %.1f с после взвода" % args.rov_disarm_after
+                  if args.rov_disarm_after > 0 else "")))
         print("  на этом ПК:   http://127.0.0.1:%d/" % args.port)
         for ip in local_ips():
             print("  с телефона:   http://%s:%d/" % (ip, args.port))
@@ -474,13 +410,17 @@ def main():
     ap = argparse.ArgumentParser(description="Эмулятор буя ТНПА (HTTP + WebSocket /ws на одном порту)")
     ap.add_argument("--host", default="0.0.0.0", help="адрес прослушивания (по умолчанию 0.0.0.0)")
     ap.add_argument("--port", type=int, default=8080, help="порт HTTP и WS (по умолчанию 8080)")
-    ap.add_argument("--fps", type=float, default=10.0, help="частота видеокадров (по умолчанию 10)")
+    ap.add_argument("--fps", type=float, default=10.0, help="частота видеокадров (по умолчанию 10; 0 — без видео)")
     ap.add_argument("--frames", help="папка с JPEG-кадрами (по кругу) вместо генератора")
     ap.add_argument("--no-vbat", action="store_true", help="слать vbat 0.00 («не измеряется», ICD §6)")
     ap.add_argument("--no-pil", action="store_true", help="не использовать Pillow даже если он есть")
     ap.add_argument("--drop", action="store_true", help="периодически замолкать (проверка «НЕТ СВЯЗИ»)")
     ap.add_argument("--drop-period", type=float, default=10.0, help="период цикла --drop, с (по умолчанию 10)")
     ap.add_argument("--drop-len", type=float, default=3.0, help="длительность молчания в цикле, с (по умолчанию 3)")
+    ap.add_argument("--no-armed", action="store_true",
+                    help="телеметрия протокола v1 без ключа armed (проверка совместимости WebApp)")
+    ap.add_argument("--rov-disarm-after", type=float, default=0.0, metavar="N",
+                    help="через N с после взвода ТНПА сообщает armed:0 (обрыв линии вниз); 0 — выкл.")
     ap.add_argument("--duration", type=float, default=0.0, help="завершиться через N секунд (0 — работать бесконечно)")
     ap.add_argument("-v", "--verbose", action="store_true", help="печатать каждую принятую команду")
     args = ap.parse_args()
@@ -488,8 +428,8 @@ def main():
         sys.stdout.reconfigure(line_buffering=True)   # лог виден сразу и при перенаправлении в файл
     except AttributeError:
         pass
-    if args.fps <= 0 or args.drop_len <= 0 or args.drop_len >= args.drop_period:
-        ap.error("нужны fps > 0 и 0 < drop-len < drop-period")
+    if args.fps < 0 or args.drop_len <= 0 or args.drop_len >= args.drop_period or args.rov_disarm_after < 0:
+        ap.error("нужны fps ≥ 0, 0 < drop-len < drop-period, rov-disarm-after ≥ 0")
     # Обрывы до HTTP-запроса (предварительные соединения браузера) — не ошибка, не шумим
     logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
     try:

@@ -12,7 +12,7 @@ namespace thrusters {
 // Настройка LEDC и немедленная выдача ESC_US_NEUTRAL на все каналы
 void begin();
 
-// Все ESC = 1500 мкс немедленно, состояние slew = 0
+// Все ESC = ESC_US_NEUTRAL немедленно, состояние slew = 0
 void stopAll();
 
 // Микширование осей {surge, yaw, heave, sway} -1..+1 с реальным dt по micros()

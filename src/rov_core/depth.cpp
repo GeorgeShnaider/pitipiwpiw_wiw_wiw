@@ -21,7 +21,7 @@ constexpr uint32_t kCycleMs = 1000UL / DEPTH_POLL_HZ;
 }  // namespace
 
 DepthSensor::DepthSensor()
-    : state_(State::Init), stateMs_(0), lastCycleMs_(0), d1_(0), ok_(false),
+    : state_(State::Init), stateMs_(0), lastCycleMs_(0), d1_(0), promIdx_(0), ok_(false),
       depthM_(0.0f), tempC_(0.0f), pressureMbar_(0.0f), zeroStarted_(false),
       zeroDone_(false), zeroStartMs_(0), zeroSum_(0.0), zeroN_(0), zeroMbar_(0.0f),
       errors_(0), lastError_("нет") {
@@ -80,24 +80,35 @@ bool DepthSensor::update(uint32_t nowMs) {
             return false;
 
         case State::Init:
+            // Сначала дешёвые проверки: свободна ли шина и отвечает ли адрес
+            if (!i2cbus::busIdle()) {
+                fail(nowMs, "шина I2C занята: SDA или SCL в 0");
+                return false;
+            }
+            if (!i2cbus::probe(MS5837_I2C_ADDR)) {
+                fail(nowMs, "нет ответа на адрес (NACK)");
+                return true;
+            }
             if (!i2cbus::writeCmd(MS5837_I2C_ADDR, kCmdReset)) {
                 fail(nowMs, "нет ответа на reset");
                 return true;
             }
             state_ = State::WaitReset;
             stateMs_ = nowMs;
+            promIdx_ = 0;
             return true;
 
         case State::WaitReset: {
             if (nowMs - stateMs_ < MS5837_RESET_WAIT_MS) return false;
-            for (uint8_t i = 0; i < MS5837_PROM_WORDS; i++) {
-                uint8_t b[2];
-                if (!i2cbus::readRegs(MS5837_I2C_ADDR, static_cast<uint8_t>(kCmdPromBase + 2U * i), b, 2)) {
-                    fail(nowMs, "ошибка чтения PROM");
-                    return true;
-                }
-                prom_[i] = static_cast<uint16_t>((static_cast<uint16_t>(b[0]) << 8) | b[1]);
+            // Одно слово PROM за проход loop(): короткие шаги вместо пачки транзакций
+            uint8_t b[2];
+            if (!i2cbus::readRegs(MS5837_I2C_ADDR, static_cast<uint8_t>(kCmdPromBase + 2U * promIdx_), b, 2)) {
+                fail(nowMs, "ошибка чтения PROM");
+                return true;
             }
+            prom_[promIdx_] = static_cast<uint16_t>((static_cast<uint16_t>(b[0]) << 8) | b[1]);
+            promIdx_++;
+            if (promIdx_ < MS5837_PROM_WORDS) return true;
             if (!ms5837PromValid(prom_)) {
                 fail(nowMs, "CRC4 PROM не сошлась");
                 return true;

@@ -15,7 +15,6 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
 body{position:fixed;inset:0}
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none}
-#novideo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);color:#56656f;font-size:18px;pointer-events:none}
 #top{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
  padding:4px max(8px,env(safe-area-inset-right)) 4px max(8px,env(safe-area-inset-left));
  background:rgba(0,0,0,.5);font-size:14px;line-height:1.2;pointer-events:none}
@@ -31,9 +30,13 @@ body.stale .t b{opacity:.4}
 #sp{flex:1}
 #fs{pointer-events:auto;border:1px solid #6d7d88;background:rgba(0,0,0,.4);color:#e8eef2;border-radius:6px;
  padding:5px 10px;font-size:14px}
-#hor{position:fixed;top:44px;left:50%;transform:translateX(-50%);width:124px;height:124px;pointer-events:none}
-#att{position:fixed;top:170px;left:50%;transform:translateX(-50%);font-size:13px;background:rgba(0,0,0,.5);
- padding:2px 8px;border-radius:6px;white-space:nowrap;font-variant-numeric:tabular-nums;pointer-events:none}
+/* Центральная колонка: горизонт, углы, заглушка видео — в одном потоке, перекрыться не могут */
+#mid{position:fixed;top:44px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;
+ align-items:center;gap:4px;pointer-events:none}
+#hor{display:block;width:124px;height:124px}
+#att{font-size:13px;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:6px;white-space:nowrap;
+ font-variant-numeric:tabular-nums}
+#novideo{font-size:13px;color:#8796a0;border:1px solid #3a4650;padding:2px 10px;border-radius:6px;white-space:nowrap}
 .joy{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));width:min(46vh,32vw);height:min(46vh,32vw);touch-action:none}
 #jl{left:max(10px,env(safe-area-inset-left))}
 #jr{right:max(10px,env(safe-area-inset-right))}
@@ -57,8 +60,15 @@ body.stale .t b{opacity:.4}
 #arm.on{background:#c62828;border-color:#ff8a80}
 #arm.dis{opacity:.45}
 #light.on{background:#f9a825;border-color:#fff59d;color:#000}
-#msg{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);font-size:12px;color:#c8d4dc;background:rgba(0,0,0,.5);
- padding:2px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
+/* Над кнопками: фактическое состояние ТНПА (из телеметрии) и подсказка — одной колонкой */
+#info{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);display:flex;flex-direction:column;
+ align-items:center;gap:3px;pointer-events:none}
+#msg{font-size:12px;color:#c8d4dc;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:6px;white-space:nowrap}
+#rov{font-size:13px;font-weight:700;padding:2px 10px;border-radius:6px;white-space:nowrap;
+ background:rgba(30,40,48,.8);color:#9aabb6;border:1px solid #3a4650}
+#rov.on{background:#c62828;color:#fff;border-color:#ff8a80}
+#rov.off{color:#e8eef2}
+#rov.mis{background:#a67400;color:#fff;border-color:#ffd54f}
 #rot{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.8);
  padding:14px 18px;border-radius:10px;font-size:16px;text-align:center;pointer-events:none}
 @media (orientation:portrait){#rot{display:block}}
@@ -66,7 +76,6 @@ body.stale .t b{opacity:.4}
 </head>
 <body>
 <img id="video" alt="">
-<div id="novideo">нет видео</div>
 
 <div id="top">
  <span id="link" class="t bad">НЕТ СВЯЗИ</span>
@@ -80,15 +89,21 @@ body.stale .t b{opacity:.4}
  <button id="fs" type="button">⛶ Экран</button>
 </div>
 
-<canvas id="hor" width="124" height="124"></canvas>
-<div id="att">крен — ° · дифф. — °</div>
+<div id="mid">
+ <canvas id="hor" width="124" height="124"></canvas>
+ <div id="att">крен — ° · дифф. — °</div>
+ <div id="novideo">нет видео</div>
+</div>
 
 <div id="jl" class="joy"><div class="base"></div><div class="knob"></div>
  <div class="val" id="jlv">ход 0 · курс 0</div><div class="lbl">ХОД ↕ · КУРС ↔</div></div>
 <div id="jr" class="joy"><div class="base"></div><div class="knob"></div>
  <div class="val" id="jrv">верт 0 · лаг 0</div><div class="lbl">ВЕРТ ↕ · ЛАГ ↔</div></div>
 
-<div id="msg">ARM: удерживать 1 с · DISARM: одно касание</div>
+<div id="info">
+ <div id="rov">ТНПА: —</div>
+ <div id="msg">ARM: удерживать 1 с · DISARM: одно касание</div>
+</div>
 <div id="btns">
  <div id="arm" class="btn dis"><div class="fill"></div><span id="armTxt">ARM<br><small>держать 1 с</small></span></div>
  <div id="light" class="btn"><span>СВЕТ</span></div>
@@ -111,6 +126,7 @@ body.stale .t b{opacity:.4}
   var VBAT_CRIT_V = 13.2;           // config.h VBAT_CRIT_V
   var VBAT_NONE_V = 0.05;           // ICD §6: vbat = 0 — напряжение не измеряется
   var ARM_HOLD_MS = 1000;           // удержание кнопки ARM
+  var ROV_MISMATCH_MS = 1000;       // ICD §8: UI взведён, а ТНПА дольше 1 с сообщает armed:0
   var DEADZONE = 0.05;              // мёртвая зона джойстика
   var EXPO = 0.4;                   // доля кубической составляющей кривой
   var MAX_WS_BUFFERED = 1024;       // при застрявшем сокете не копим устаревшие команды
@@ -127,6 +143,9 @@ body.stale .t b{opacity:.4}
   var lastTelem = -1e9;
   var linkFresh = false;            // состояние индикатора связи на прошлом такте
   var failReason = "";
+  var uiArmedAt = 0;                // момент взвода UI (окно ответа ТНПА отсчитывается от него)
+  var rovArmed = null;              // фактический armed ТНПА из телеметрии: 0/1, null — неизвестно
+  var rovZeroSince = null;          // начало непрерывной серии armed:0 в телеметрии
 
   // ---------------------------------------------------------------------------
   //  Джойстики
@@ -251,6 +270,7 @@ body.stale .t b{opacity:.4}
       armFill.style.width = "0";
       if (telemFresh() && document.visibilityState === "visible") {
         armed = true;
+        uiArmedAt = performance.now();
         failReason = "";
       }
       renderButtons();
@@ -345,6 +365,16 @@ body.stale .t b{opacity:.4}
     }
     tel = o;
     lastTelem = performance.now();
+    // Протокол v2 (D-010): armed — фактическое состояние ТНПА. Без ключа (прошивка v1)
+    // строка принимается, но фактическое состояние неизвестно.
+    if (o.armed === 0 || o.armed === 1) {
+      if (o.armed === 0 && rovArmed !== 0) rovZeroSince = lastTelem;
+      if (o.armed === 1) rovZeroSince = null;
+      rovArmed = o.armed;
+    } else {
+      rovArmed = null;
+      rovZeroSince = null;
+    }
     $("vDepth").textContent = o.depth.toFixed(2);
     $("vTemp").textContent = o.temp.toFixed(1);
     var y = o.yaw % 360; if (y < 0) y += 360;
@@ -415,6 +445,8 @@ body.stale .t b{opacity:.4}
       if (s !== ws) return;
       ws = null;
       lastTelem = -1e9;
+      rovArmed = null;
+      rovZeroSince = null;
       failsafe("WS закрыт");
     };
   }
@@ -455,7 +487,18 @@ body.stale .t b{opacity:.4}
     // взвод заблокирован до восстановления, автоматически не взводимся
     if (!fresh && (linkFresh || armed)) failsafe(wsOpen() ? "нет телеметрии" : "нет связи");
     if (!fresh && holdId !== null) holdCancel();
+    // ICD §8 (D-010): UI взведён, а ТНПА непрерывно > 1 с сообщает armed:0 —
+    // команды до ТНПА не доходят. Окно 1 с отсчитывается и от момента взвода UI.
+    if (armed && fresh && rovArmed === 0 && rovZeroSince !== null &&
+        now - Math.max(rovZeroSince, uiArmedAt) > ROV_MISMATCH_MS) {
+      failsafe("ТНПА не получает команды");
+    }
     linkFresh = fresh;
+    var rov = $("rov"), known = fresh && rovArmed !== null;
+    rov.textContent = !known ? "ТНПА: —" : (rovArmed === 1 ? "ТНПА: ВЗВЕДЁН" : "ТНПА: НЕ ВЗВЕДЁН");
+    rov.classList.toggle("on", known && rovArmed === 1);
+    rov.classList.toggle("off", known && rovArmed === 0 && !armed);
+    rov.classList.toggle("mis", known && rovArmed === 0 && armed);
     var link = $("link");
     link.textContent = fresh ? "СВЯЗЬ" : "НЕТ СВЯЗИ";
     link.classList.toggle("ok", fresh);

@@ -4,7 +4,7 @@
 > Карточка для субагента WebApp проекта ТНПА. Прочитай `CLAUDE.md`, `docs/agents/01_webapp.md`, `docs/ICD.md` (§1, §4, §6, §7, §8). Правишь только свои файлы.
 
 ## Владею
-`data/index.html`, `tools/mock_buoy.py`, `tools/README.md`.
+`data/index.html`, `tools/mock_buoy.py`, `tools/bench_link.py`, `tools/jpeg_mini.py`, `tools/cam_rx.py`, `tools/README.md`.
 
 ## Задача
 Однофайловый WebApp (HTML + CSS + JS в одном файле, **без CDN, шрифтов и внешних ресурсов**: у телефона в сети буя нет интернета). Целевой экран — смартфон в **альбомной** ориентации, управление двумя большими пальцами.

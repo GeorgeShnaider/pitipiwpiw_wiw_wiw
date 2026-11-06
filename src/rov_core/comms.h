@@ -26,8 +26,9 @@ void begin();
 // валидный пакет; out — последний из них.
 bool poll(ControlPacket &out);
 
-// Отправляет телеметрию, если подошло время (TELEMETRY_RATE_HZ)
-void serviceTelemetry(uint32_t nowMs);
+// Отправляет телеметрию, если подошло время (TELEMETRY_RATE_HZ).
+// armed — фактическое состояние взвода на момент формирования строки (контракт №3, v2).
+void serviceTelemetry(uint32_t nowMs, bool armed);
 
 void setTelemetry(const TelemetryData &t);
 

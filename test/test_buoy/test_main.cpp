@@ -240,11 +240,36 @@ static void test_telemetry_real_format() {
     TelemetryLineAssembler a;
     std::vector<std::string> lines;
     char buf[TELEMETRY_MAX_LEN + 1];
-    const int n = snprintf(buf, sizeof buf, TELEMETRY_JSON_FMT, 1.23, 18.4, 15.62, -2.1, 0.8, 134.5);
+    const int n = snprintf(buf, sizeof buf, TELEMETRY_JSON_FMT, 1.23, 18.4, 15.62, -2.1, 0.8, 134.5, 1);
     TEST_ASSERT_TRUE(n > 1);
     feedLines(a, std::string(buf, static_cast<size_t>(n)), lines);
     TEST_ASSERT_TRUE_MESSAGE(lines.size() == 1 && lines[0] == std::string(buf, static_cast<size_t>(n) - 1U),
-                             "строка TELEMETRY_JSON_FMT пересылается без \\n");
+                             "строка TELEMETRY_JSON_FMT v2 (7 ключей) пересылается без \\n");
+    TEST_ASSERT_TRUE_MESSAGE(lines[0].find("\"armed\":1}") != std::string::npos, "ключ armed v2 сохраняется как есть");
+}
+
+static void test_telemetry_v2_worst_length() {
+    // Худшая правдоподобная строка v2: все поля максимальной ширины со знаком
+    TelemetryLineAssembler a;
+    std::vector<std::string> lines;
+    char buf[2 * TELEMETRY_MAX_LEN];
+    const int n = snprintf(buf, sizeof buf, TELEMETRY_JSON_FMT, -999.99, -999.9, 999.99, -180.0, -90.0, 359.9, 1);
+    TEST_ASSERT_TRUE_MESSAGE(n > 1 && static_cast<size_t>(n) <= TELEMETRY_MAX_LEN,
+                             "худшая строка v2 укладывается в TELEMETRY_MAX_LEN вместе с \\n");
+    feedLines(a, std::string(buf, static_cast<size_t>(n)), lines);
+    TEST_ASSERT_TRUE_MESSAGE(lines.size() == 1 && lines[0].size() == static_cast<size_t>(n) - 1U,
+                             "худшая строка v2 проходит сборщик целиком");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, a.overflows(), "без переполнения");
+
+    // Мусор датчика (огромные числа) даёт строку длиннее лимита: она выбрасывается
+    // целиком, а не обрезается, и следующая нормальная строка проходит
+    const int big = snprintf(buf, sizeof buf, TELEMETRY_JSON_FMT, 1e30, 1e30, 1e30, 1e30, 1e30, 1e30, 0);
+    TEST_ASSERT_TRUE(big > static_cast<int>(TELEMETRY_MAX_LEN));
+    lines.clear();
+    feedLines(a, std::string(buf, strnlen(buf, sizeof buf)) + "\n", lines);
+    feedLines(a, "{\"ok\":2}\n", lines);
+    TEST_ASSERT_TRUE_MESSAGE(lines.size() == 1 && lines[0] == "{\"ok\":2}", "слишком длинная строка выброшена целиком");
+    TEST_ASSERT_EQUAL_UINT32(1, a.overflows());
 }
 
 // =============================================================================
@@ -350,6 +375,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_telemetry_overflow);
     RUN_TEST(test_telemetry_length_boundary);
     RUN_TEST(test_telemetry_real_format);
+    RUN_TEST(test_telemetry_v2_worst_length);
     RUN_TEST(test_video_cam_stream_matches_reference);
     RUN_TEST(test_video_extra_stream_matches_reference);
     RUN_TEST(test_video_max_frame_boundary);

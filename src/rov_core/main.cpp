@@ -88,6 +88,11 @@ void setup() {
 
     Serial.setTxBufferSize(USB_LOG_TX_BUFFER);
     Serial.begin(USB_LOG_BAUD);
+    // Отключаем вывод log_e/log_w ядра в UART0: log_printfv() (esp32-hal-uart.c:855)
+    // после печати ждёт полного опустошения TX UART, то есть всего нашего буфера
+    // лога (до USB_LOG_TX_BUFFER байт ≈ 89 мс на 115200), и рвёт наши строки.
+    // Сообщения паники/исключений IDF печатаются своим путём и не затрагиваются.
+    Serial.setDebugOutput(false);
     comms::begin();
 
     const uint32_t now = millis();
@@ -142,6 +147,6 @@ void loop() {
     TelemetryData t;
     sensors::fill(t);
     comms::setTelemetry(t);
-    comms::serviceTelemetry(now);
+    comms::serviceTelemetry(now, supervisor.armed());
     logStatus(now);
 }

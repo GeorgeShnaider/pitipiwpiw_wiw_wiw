@@ -42,13 +42,14 @@ bool poll(ControlPacket &out) {
     return got;
 }
 
-void serviceTelemetry(uint32_t nowMs) {
+void serviceTelemetry(uint32_t nowMs, bool armed) {
     if (nowMs - lastTelemetryMs < kTelemetryPeriodMs) return;
     lastTelemetryMs = nowMs;
     const int n = snprintf(txBuf, sizeof(txBuf), TELEMETRY_JSON_FMT,
                            static_cast<double>(telem.depth), static_cast<double>(telem.temp),
                            static_cast<double>(telem.vbat), static_cast<double>(telem.roll),
-                           static_cast<double>(telem.pitch), static_cast<double>(telem.yaw));
+                           static_cast<double>(telem.pitch), static_cast<double>(telem.yaw),
+                           armed ? 1 : 0);
     if (n <= 0 || n >= static_cast<int>(sizeof(txBuf))) {
         // Строка обрезана бы без '\n' — не отправляем битый JSON
         dropped++;

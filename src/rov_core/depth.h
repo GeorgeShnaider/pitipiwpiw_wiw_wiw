@@ -38,6 +38,7 @@ private:
     uint32_t lastCycleMs_;
     uint16_t prom_[MS5837_PROM_WORDS];
     uint32_t d1_;
+    uint8_t promIdx_;   // следующее слово PROM при инициализации
 
     bool ok_;
     float depthM_;

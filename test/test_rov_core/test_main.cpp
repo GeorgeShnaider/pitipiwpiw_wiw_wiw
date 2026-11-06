@@ -21,7 +21,7 @@
 #include "crc_ref.inc"
 
 // Общее число проверок CHECK во всех тестах (контроль, что ничего не потеряно)
-static const int EXPECTED_CHECKS = 275;
+static const int EXPECTED_CHECKS = 278;
 
 static int g_checks = 0;
 static char g_msg[256];
@@ -50,6 +50,15 @@ void tearDown(void) {}
 
 // ---------------------------------------------------------------- микшер ----
 
+// Ожидания строятся от констант config.h (ICD §9: NEUTRAL + (MAX-MIN)/2 * u),
+// чтобы смена диапазона ESC не ломала тесты.
+static const unsigned US_N = ESC_US_NEUTRAL;
+static const float US_HALF = (ESC_US_MAX - ESC_US_MIN) / 2.0f;
+
+static unsigned expectUs(float u) {
+    return (unsigned)floorf((float)US_N + US_HALF * u + 0.5f);
+}
+
 static void run(Mixer &m, float s, float y, float h, float w, float t, uint16_t out[ESC_COUNT],
                 float dt = 0.01f) {
     float ax[AX_COUNT] = {s, y, h, w};
@@ -61,27 +70,27 @@ static void test_mixer_signs(void) {
     uint16_t o[ESC_COUNT];
     Mixer m;
     run(m, 1, 0, 0, 0, 1, o);
-    CHECK(o[0] > 1500 && o[1] > 1500, "surge+: ожидались M0,M1 > 1500, получено M0=%u M1=%u", o[0], o[1]);
-    CHECK(o[4] == 1500 && o[5] == 1500, "резервные M4/M5 должны быть 1500, получено %u/%u", o[4], o[5]);
+    CHECK(o[0] > US_N && o[1] > US_N, "surge+: ожидались M0,M1 > %u, получено M0=%u M1=%u", US_N, o[0], o[1]);
+    CHECK(o[4] == US_N && o[5] == US_N, "резервные M4/M5 должны быть %u, получено %u/%u", US_N, o[4], o[5]);
     m.reset(); run(m, 0, 1, 0, 0, 1, o);
-    CHECK(o[0] > 1500 && o[1] < 1500, "yaw+: ожидались M0 > 1500, M1 < 1500, получено M0=%u M1=%u", o[0], o[1]);
+    CHECK(o[0] > US_N && o[1] < US_N, "yaw+: ожидались M0 > %u, M1 < %u, получено M0=%u M1=%u", US_N, US_N, o[0], o[1]);
     m.reset(); run(m, 0, 0, 1, 0, 1, o);
-    CHECK(o[2] > 1500 && o[0] == 1500 && o[3] == 1500, "heave+: ожидался только M2 > 1500, получено M2=%u", o[2]);
+    CHECK(o[2] > US_N && o[0] == US_N && o[3] == US_N, "heave+: ожидался только M2 > %u, получено M2=%u", US_N, o[2]);
     m.reset(); run(m, 0, 0, 0, 1, 1, o);
-    CHECK(o[3] > 1500 && o[2] == 1500, "sway+: ожидался только M3 > 1500, получено M3=%u", o[3]);
+    CHECK(o[3] > US_N && o[2] == US_N, "sway+: ожидался только M3 > %u, получено M3=%u", US_N, o[3]);
     m.reset(); run(m, -1, -1, -1, -1, 1, o);
-    CHECK(o[4] == 1500 && o[5] == 1500, "резервные M4/M5 при всех осях -1 должны быть 1500");
+    CHECK(o[4] == US_N && o[5] == US_N, "резервные M4/M5 при всех осях -1 должны быть %u", US_N);
     m.reset(); run(m, -1, 0, 0, 0, 1, o);
-    CHECK(o[0] == 1500 - (int)(500 * THRUST_LIMIT) && o[1] == o[0], "surge-: неверный M0=%u", o[0]);
+    CHECK(o[0] == expectUs(-THRUST_LIMIT) && o[1] == o[0], "surge-: M0=%u, ожидалось %u", o[0], expectUs(-THRUST_LIMIT));
 }
 
 static void test_mixer_normalization(void) {
     uint16_t o[ESC_COUNT];
     Mixer m;
     run(m, 1, 1, 0, 0, 2, o);
-    uint16_t exp0 = (uint16_t)(1500 + 500 * THRUST_LIMIT + 0.5f);
-    CHECK(o[0] == exp0 && o[1] == 1500, "нормализация surge=1,yaw=1: M0=%u (ожидалось %u), M1=%u (ожидалось 1500)",
-          o[0], exp0, o[1]);
+    const unsigned exp0 = expectUs(THRUST_LIMIT);
+    CHECK(o[0] == exp0 && o[1] == US_N, "нормализация surge=1,yaw=1: M0=%u (ожидалось %u), M1=%u (ожидалось %u)",
+          o[0], exp0, o[1], US_N);
 }
 
 static void test_mixer_slew(void) {
@@ -113,16 +122,17 @@ static void test_mixer_slew(void) {
 
 static void test_mixer_deadband(void) {
     for (float u = -0.049f; u <= 0.049f; u += 0.001f) {
-        CHECK(Mixer::commandToUs(u) == 1500, "мёртвая зона: u=%f дал %u вместо 1500", u, Mixer::commandToUs(u));
+        CHECK(Mixer::commandToUs(u) == US_N, "мёртвая зона: u=%f дал %u вместо %u", u, Mixer::commandToUs(u), US_N);
     }
-    CHECK(Mixer::commandToUs(0.05f) > 1500, "мёртвая зона: u=0.05 должен давать > 1500");
+    CHECK(Mixer::commandToUs(ESC_DEADBAND) > US_N, "мёртвая зона: u=ESC_DEADBAND должен давать > %u", US_N);
     CHECK(Mixer::commandToUs(1.0f) == ESC_US_MAX && Mixer::commandToUs(-1.0f) == ESC_US_MIN,
           "u=±1 должны давать ESC_US_MAX/ESC_US_MIN");
     CHECK(Mixer::commandToUs(5.0f) == ESC_US_MAX, "u=5 должен ограничиваться ESC_US_MAX");
     Mixer m;
     uint16_t o[ESC_COUNT];
-    run(m, 0.08f, 0, 0, 0, 1, o);
-    CHECK(o[0] == 1500, "мёртвая зона через микшер (0.08*0.5=0.04): M0=%u вместо 1500", o[0]);
+    // Ось, которая после THRUST_LIMIT даёт 0.8 * ESC_DEADBAND
+    run(m, 0.8f * ESC_DEADBAND / THRUST_LIMIT, 0, 0, 0, 1, o);
+    CHECK(o[0] == US_N, "мёртвая зона через микшер (0.8*ESC_DEADBAND после лимита): M0=%u вместо %u", o[0], US_N);
 }
 
 // ---------------------------------------------------------------- парсер ----
@@ -397,6 +407,28 @@ static void test_vbat(void) {
     CHECK(a.value() == 16.0f && a.count() == VBAT_AVG_WINDOW, "окно скользящего среднего работает неверно");
 }
 
+// ------------------------------------------------- телеметрия (контракт №3) ---
+
+static int telemetryLen(char *buf, size_t size, double depth, int armed) {
+    // Худшие значения полей: temp -40.0, vbat 99.99, roll -180.0, pitch -90.0, yaw 359.9
+    return snprintf(buf, size, TELEMETRY_JSON_FMT, depth, -40.0, 99.99, -180.0, -90.0, 359.9, armed);
+}
+
+static void test_telemetry_worst_length(void) {
+    char buf[256];
+    const int n1 = telemetryLen(buf, sizeof(buf), -99.99, 1);
+    CHECK(n1 > 0 && n1 < TELEMETRY_MAX_LEN, "худшая строка телеметрии (depth -99.99): %d байт, лимит < %d", n1,
+          TELEMETRY_MAX_LEN);
+    const int n2 = telemetryLen(buf, sizeof(buf), 999.99, 1);
+    CHECK(n2 > 0 && n2 < TELEMETRY_MAX_LEN, "худшая строка телеметрии (depth 999.99): %d байт, лимит < %d", n2,
+          TELEMETRY_MAX_LEN);
+    const size_t len = strlen(buf);
+    CHECK(len > 12 && strcmp(buf + len - 12, ",\"armed\":1}\n") == 0,
+          "строка телеметрии должна заканчиваться полем armed и переводом строки: %s", buf);
+    INFO("телеметрия: худшая строка %d байт с '\\n' (лимит %d, буфер rov_core требует < %d)", n1 > n2 ? n1 : n2,
+         TELEMETRY_MAX_LEN, TELEMETRY_MAX_LEN);
+}
+
 // ------------------------------------------------------------- контроль -----
 
 static void test_all_checks_ran(void) {
@@ -417,6 +449,7 @@ int main(int, char **) {
     RUN_TEST(test_attitude);
     RUN_TEST(test_imu_who_am_i);
     RUN_TEST(test_vbat);
+    RUN_TEST(test_telemetry_worst_length);
     RUN_TEST(test_all_checks_ran);
     return UNITY_END();
 }
